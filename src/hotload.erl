@@ -17,4 +17,4 @@ server(State) ->
 
 upgrade(OldState) ->
 
-%%
+    true.
