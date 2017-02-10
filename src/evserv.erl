@@ -50,10 +50,124 @@ loop(State) ->
             loop(S#state{events=Events});
 
         {done, Name} ->
-        ...
+
+
+
+            case orddict:find(Name, S#state.events) of 
+                {ok, E} ->
+
+                    sned_to_clients({done, E#event.name, E#event.description},
+                    S#state.clients),
+
+                    NewEvents = orddict:erase(Name, S#state.events),
+
+                    loop(S#state{events=NewEvents});
+
+                error ->
+
+                loop(S)
+
+            end;
+
 
         shutdown ->
-        ...
+
+            exit(shutdown);
+
+        {'DOWN', Ref, process, _Pid, _Reason} ->
+
+            loop(S#state{clients=orddict:erase(Ref, S#state.clients)});
+
+        code_change ->
+            ?MODULE:loop(s);
+
+        Unknown ->
+
+            io:format("Unknown message: ~p~n," [Unknown]),
+            loop(S)
+
+
+start() ->
+    register(?MODULE, Pid=spawn(?MODULE, init, [])),
+    Pid.
+
+
+start_link() ->
+    register(?MODULE, Pid=spawn(?MODULE, init, [])),
+    Pid.
+
+
+terminate() ->
+    ?MODULE ! shutdown.
+
+
+subscribe(Pid) ->
+    Ref = erlang:monitor(process, whereis(?MODULE)),
+
+    ?MODULE ! {self(), Ref, {subscribe, Pid}},
+    receive
+        {Ref, ok} ->
+            {ok, Ref};
+        {'DOWN', Reason}
+
+    after 5000 ->
+        {error, timeout}
+
+    end.
+
+
+add_event(Name, Description, Time) ->
+
+    Ref = make_ref(),
+    ?MODULE ! { self(), Ref, {add, Name, Description, TimeOut }},
+    receive 
+        {Ref, Msg} -> Msg
+
+    after 5000 ->
+        {error, timeout}
+
+    end.
+
+add_event2(Name, Description, TimeOut) ->
+
+    Ref = make_ref(),
+    ?MODULE !{self(), Ref, {add, Name, Description, TimeOut}},
+    receive
+        {Ref, {error, Reason}} -> erlang:error(Reason);
+        {Ref, Msg} -> Msg
+
+    after 5000 ->
+        {error, timeout}
+
+    end.
+
+
+cancel(Name) ->
+    Ref = make_ref(),
+    ?MODULE ! {self(), Ref, {cancel, Name}},
+    receive
+        {Ref, ok} ->
+
+    after 5000 ->
+        {error, timeout}
+
+    end.
+
+listen(Delay) ->
+receive
+    M = {done, _Name, _Description} ->
+        [ M | listen(0)]
+
+    after Delay*1000 ->
+        []
+
+    end.
+
+
+sned_to_clients(Msg, ClientDict) ->
+    orddict:map(func(_Ref, Pid) -> Pid ! Msg end, ClientDict).
+
+
 
 
 valid_datetime({Date, Time}) ->
